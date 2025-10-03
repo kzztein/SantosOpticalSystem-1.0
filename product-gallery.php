@@ -110,10 +110,28 @@
             $sql .= " ORDER BY p.Model ASC";
     }
     
-    // Get total count
-    $countSql = ($branch > 0) 
-        ? str_replace("DISTINCT p.*, pb.Stocks, b.BranchName", "COUNT(DISTINCT p.ProductID) as total", $sql)
-        : str_replace("p.*,", "COUNT(DISTINCT p.ProductID) as total", $sql);
+    // Get total count - build separate count queries
+    if ($branch > 0) {
+        $countSql = "SELECT COUNT(DISTINCT p.ProductID) as total
+                    FROM `productMstr` p
+                    JOIN ProductBranchMaster pb ON p.ProductID = pb.ProductID
+                    JOIN BranchMaster b ON pb.BranchCode = b.BranchCode
+                    LEFT JOIN archives a ON (p.ProductID = a.TargetID AND a.TargetType = 'product')
+                    WHERE (pb.Avail_FL = 'Available' OR pb.Avail_FL IS NULL)
+                    AND a.ArchiveID IS NULL
+                    AND pb.BranchCode = $branch";
+    } else {
+        $countSql = "SELECT COUNT(DISTINCT p.ProductID) as total
+                    FROM `productMstr` p
+                    LEFT JOIN archives a ON (p.ProductID = a.TargetID AND a.TargetType = 'product')
+                    WHERE (p.Avail_FL = 'Available' OR p.Avail_FL IS NULL)
+                    AND a.ArchiveID IS NULL";
+    }
+
+    // Add the same WHERE conditions to count query
+    if (!empty($whereConditions)) {
+        $countSql .= " AND " . implode(' AND ', $whereConditions);
+    }
     
     $countResult = mysqli_query($conn, $countSql);
     $totalData = mysqli_fetch_assoc($countResult);
@@ -536,41 +554,6 @@
                         </div>
                     </form>
                     
-                
-                <div class="filter-container">
-                    <!-- Branch Filter -->
-                    <form method="get" action="" class="filter-dropdown">
-                        <input type="hidden" name="page" value="1"> <!-- Always reset to page 1 when applying a new filter -->
-                        <?php if(isset($_GET['search'])): ?>
-                            <input type="hidden" name="search" value="<?php echo $_GET['search']; ?>">
-                        <?php endif; ?>
-                        <?php if(isset($_GET['sort'])): ?>
-                            <input type="hidden" name="sort" value="<?php echo $_GET['sort']; ?>">
-                        <?php endif; ?>
-                        <?php if(isset($_GET['shape'])): ?>
-                            <input type="hidden" name="shape" value="<?php echo $_GET['shape']; ?>">
-                        <?php endif; ?>
-                        <?php if(isset($_GET['category'])): ?>
-                            <input type="hidden" name="category" value="<?php echo $_GET['category']; ?>">
-                        <?php endif; ?>
-                        <div class="input-group">
-                            <label class="input-group-text" for="branchSelect">Branch:</label>
-                            <select class="form-select" id="branchSelect" name="branch" onchange="this.form.submit()">
-                                <option value="">All Branches</option>
-                                <?php
-                                    $conn = connect();
-                                    $branchQuery = "SELECT BranchCode, BranchName FROM BranchMaster";
-                                    $branchResult = mysqli_query($conn, $branchQuery);
-                                    while ($branch = mysqli_fetch_assoc($branchResult)) {
-                                        $selected = (isset($_GET['branch']) && $_GET['branch'] == $branch['BranchCode']) ? 'selected' : '';
-                                        echo "<option value='{$branch['BranchCode']}' $selected>{$branch['BranchName']}</option>";
-                                    }
-                                    $conn->close();
-                                ?>
-                            </select>
-                        </div>
-                    </form>
-                    
                     <!-- Frame Shape Filter -->
                     <form method="get" action="" class="filter-dropdown">
                         <input type="hidden" name="page" value="1"> <!-- Always reset to page 1 when applying a new filter -->
@@ -859,4 +842,3 @@
         </script>
     </body>
 </html>
-
